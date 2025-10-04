@@ -15,19 +15,22 @@ HOME = os.environ['HOME']
 
 class Cluster(StrEnum):
     EXPANSE = auto()
+    IMPERIAL = auto()
     UNKNOWN = auto()
 
 
 def detect_cluster() -> Cluster:
     if os.path.exists('/expanse/lustre/'):
         return Cluster.EXPANSE
+    elif HOME.startswith('/rds/general/user/'):
+        return Cluster.IMPERIAL
     else:
         return Cluster.UNKNOWN
 
 
 def get_num_threads(cluster: Cluster) -> int:
     num_threads = 1
-    if cluster == Cluster.EXPANSE:
+    if cluster == Cluster.EXPANSE or cluster == cluster.IMPERIAL:
         if os.environ['HOSTNAME'].startswith('login'):
             num_threads = 1
         else:
@@ -80,7 +83,48 @@ CONFIG = {Cluster.EXPANSE: {
 #SBATCH --mem=16G
 #SBATCH --account=yun124
 #SBATCH -t 00:30:00'''
-}
+},
+Cluster.IMPERIAL: {
+    'modules': {'default': [
+        'tools/prod',
+        # 'Autotools/20220317-GCCcore-12.3.0',
+        'Boost/1.82.0-GCC-12.3.0',
+        # 'CMake/3.26.3-GCCcore-12.3.0',
+        'GCC/12.3.0',
+        'GMP/6.2.1-GCCcore-12.3.0',
+        'libarchive/3.6.2-GCCcore-12.3.0',
+        'METIS/5.1.0-GCCcore-12.3.0',
+        'MPFR/4.2.0-GCCcore-12.3.0',
+        # NB: Elemental is built with openblas, so we need it even before 3.0.0
+        'OpenBLAS/0.3.23-GCC-12.3.0',
+        'OpenMPI/4.1.5-GCC-12.3.0',
+        'pkg-config/0.29.2-GCCcore-12.3.0',
+        'Python/3.11.3-GCCcore-12.3.0',
+        'RapidJSON/1.1.0-20230928-GCCcore-12.3.0'
+    ], 
+    'flint': [], 'mpsolve': []
+    },
+    'waf_args': {'default': ['--elemental-dir=$HOME/install/cx3'],
+                 'flint': ['--flint-dir=$HOME/install/cx3'],
+                 'mpsolve': ['--mpsolve-dir=$HOME/install/cx3']},
+    # Set environment variables for ./waf configure
+    'waf_env': 'CXX=mpicxx',
+    # lua or tcl
+    'module_lang': 'lua',
+    'mpirun': 'mpirun',
+    # sbatch or qsub
+    'sbatch': 'qsub',
+    'sbatch_config_template': '''
+# PBSPro configuration, see https://icl-rcs-user-guide.readthedocs.io/en/latest/hpc/queues/mpi-jobs/
+# 1 node, {num_cpus} CPUs, 16GB RAM
+# 30 min time limit
+# merge stderr into stdout
+#
+#PBS -l select=1:ncpus={num_cpus}:mpiprocs={num_cpus}:mem=16gb
+#PBS -l walltime=00:30:00
+#PBS -j oe
+'''
+},
 }
 
 
@@ -107,6 +151,10 @@ def git_clone_sdpb(args):
         remote = "davidsd"
         branch = target
 
+    # 3.0.0 does not compile on Imperial with FLINT, so we checkout a later commit.
+    # TODO: should we make a 3.0.1 release with such small fixes?
+    if args.cluster == Cluster.IMPERIAL and branch == '3.0.0':
+        branch = 'c5736a6e'
     run([
         f'cd {args.tmp_dir}',
         f'git clone https://github.com/{remote}/sdpb.git',
@@ -373,13 +421,14 @@ echo "sdpb_example.sh finished. Please compare your solution with $DATA_DIR/out"
 
 
 def run_example(args: argparse.Namespace):
+    sbatch = CONFIG[args.cluster]['sbatch']
     script_path = os.path.join(
         args.install_prefix, args.install_name, 'share', 'sdpb_example.sh')
-    job_dir = os.path.join(f'{HOME}/deploy/sbatch', args.install_name,
+    job_dir = os.path.join(f'{HOME}/deploy/{sbatch}', args.install_name,
                            datetime.now().strftime('%Y-%m-%d_%H-%M-%S'))
     os.makedirs(job_dir)
     print(f'===Run example script {script_path} at {job_dir}')
-    run([f'cd {job_dir}', f'sbatch {script_path}'])
+    run([f'cd {job_dir}', f'{sbatch} {script_path}'])
 
 
 def main():
