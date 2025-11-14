@@ -30,6 +30,7 @@ def pretty_bytes(bytes: int) -> str:
 
 
 def run(args: argparse.Namespace):
+    initial_mem = None
     max_mem = 0
     now = time.time()
     start_time = now    
@@ -45,6 +46,8 @@ def run(args: argparse.Namespace):
             return
         running = False
         print("\n" + "=" * 60)
+        if initial_mem is not None:
+            print(f'Initial MemUsed: {pretty_bytes(initial_mem)} at {format_timestamp(start_time)}')
         if max_time is not None:
             print(
                 f'Max MemUsed: {pretty_bytes(max_mem)} at {format_timestamp(max_time)}')
@@ -68,6 +71,7 @@ def run(args: argparse.Namespace):
             f.write(
                 f'''Started: {format_timestamp(start_time)}
 MemTotal: {pretty_bytes(mem_total_bytes)}
+Initial MemUsed: {pretty_bytes(initial_mem)}
 Last update: {format_timestamp(now)}
 {mem_used_str}''')
         os.replace(summary_tmp, args.summary)
@@ -78,6 +82,7 @@ Last update: {format_timestamp(now)}
     signal.signal(signal.SIGINT, handle_exit)
 
     mem_total_bytes = psutil.virtual_memory().total
+    initial_mem = get_memused_bytes()
     log(f'MemTotal: {pretty_bytes(mem_total_bytes)}')
 
     t_last_print = 0
