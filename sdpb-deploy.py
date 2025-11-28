@@ -262,7 +262,7 @@ def waf(args: argparse.Namespace):
         f'module load {" ".join(modules)}',
         f'{call_waf} --version',
         # 'rm -rf ./build',
-        f'{config["waf_env"]} {call_waf} configure {" ".join(waf_configure_args)}',
+        f'({config["waf_env"]} {call_waf} configure {" ".join(waf_configure_args)} || (cat build/config.log && exit 1))',
         f'{call_waf} -j{num_threads}',
         'ldd ./build/sdpb',
         './build/sdpb --version',
