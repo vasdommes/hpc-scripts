@@ -14,6 +14,7 @@ HOME = os.environ['HOME']
 
 
 class Cluster(StrEnum):
+    BOSTON = auto()
     EXPANSE = auto()
     IMPERIAL = auto()
     UNKNOWN = auto()
@@ -22,6 +23,8 @@ class Cluster(StrEnum):
 def detect_cluster() -> Cluster:
     if os.path.exists('/expanse/lustre/'):
         return Cluster.EXPANSE
+    elif HOME.startswith('/usr2/collab'):
+        return Cluster.BOSTON
     elif HOME.startswith('/rds/general/user/'):
         return Cluster.IMPERIAL
     else:
@@ -30,7 +33,9 @@ def detect_cluster() -> Cluster:
 
 def get_num_threads(cluster: Cluster) -> int:
     num_threads = 1
-    if cluster == Cluster.EXPANSE or cluster == cluster.IMPERIAL:
+    if cluster == Cluster.BOSTON:
+        num_threads = int(os.environ.get('NSLOTS', 1))
+    elif cluster == Cluster.EXPANSE or cluster == cluster.IMPERIAL:
         if os.environ['HOSTNAME'].startswith('login'):
             num_threads = 1
         else:
@@ -44,7 +49,44 @@ def get_num_threads(cluster: Cluster) -> int:
 
 
 # TODO: Store as Namespace? Read from file?
-CONFIG = {Cluster.EXPANSE: {
+CONFIG = {Cluster.BOSTON: {
+    'modules': {'default': [
+        'python3', 'gcc/12.2.0', 'openmpi/4.1.5', 'cmake/3.22.2', 'gmplib/6.2.1', 'mpfr/4.2.1',
+        'boost/1.83.0',
+        # 'boost/1.79.0_gcc5+',
+    ], 'flint': ['openblas/0.3.23'],
+        'mpsolve': []
+    },
+    'waf_args': {'default': [
+        '--elemental-dir=$HOME/install',
+        '--libarchive-dir=$HOME/install',
+        '--gmpxx-dir=$SCC_GMPLIB_DIR',
+        '--mpfr-dir=$SCC_MPFR_DIR',
+        '--rapidjson-dir=$HOME/install',
+    ],
+        'flint': ['--flint-dir=$HOME/install', '--cblas-dir=$SCC_OPENBLAS_DIR'],
+        'mpsolve': ['--mpsolve-dir=$HOME/install']},
+    # Set environment variables for ./waf configure
+    'waf_env': 'OMPI_LDFLAGS="$(mpicxx --showme:link) -Wl,--disable-new-dtags"',
+    # lua or tcl
+    'module_lang': 'lua',
+    'mpirun': 'mpirun',
+    # sbatch or qsub
+    'sbatch': 'qsub',
+    '/bin/sh': '/bin/sh -l',
+    'SLURM_SUBMIT_DIR': 'SGE_O_WORKDIR',
+    'sbatch_config_template': '''
+# SGE configuration, see https://www.bu.edu/tech/support/research/system-usage/running-jobs
+# 1 node, {num_cpus} CPUs
+# 30 min time limit
+# merge stderr into stdout
+#
+#$ -pe mpi_{num_cpus}_tasks_per_node {num_cpus}
+#$ -l h_rt=00:30:00
+#$ -j y
+'''
+},
+    Cluster.EXPANSE: {
     'modules': {'default': [
         'cpu/0.15.4',
         'gcc/10.2.0',
@@ -69,6 +111,7 @@ CONFIG = {Cluster.EXPANSE: {
     'mpirun': 'srun -v',
     # sbatch or qsub
     'sbatch': 'sbatch',
+    'SLURM_SUBMIT_DIR': 'SLURM_SUBMIT_DIR',
     'sbatch_config_template': '''
 # SLURM configuration, see https://www.sdsc.edu/support/user_guides/expanse.html#running and https://slurm.schedmd.com/sbatch.html
 # 1 node, {num_cpus} CPUs, 16GB RAM
@@ -84,7 +127,7 @@ CONFIG = {Cluster.EXPANSE: {
 #SBATCH --account=yun124
 #SBATCH -t 00:30:00'''
 },
-Cluster.IMPERIAL: {
+    Cluster.IMPERIAL: {
     'modules': {'default': [
         'tools/prod',
         # 'Autotools/20220317-GCCcore-12.3.0',
@@ -101,8 +144,8 @@ Cluster.IMPERIAL: {
         'pkg-config/0.29.2-GCCcore-12.3.0',
         'Python/3.11.3-GCCcore-12.3.0',
         'RapidJSON/1.1.0-20230928-GCCcore-12.3.0'
-    ], 
-    'flint': [], 'mpsolve': []
+    ],
+        'flint': [], 'mpsolve': []
     },
     'waf_args': {'default': ['--elemental-dir=$HOME/install/cx3'],
                  'flint': ['--flint-dir=$HOME/install/cx3'],
@@ -114,6 +157,7 @@ Cluster.IMPERIAL: {
     'mpirun': 'mpirun',
     # sbatch or qsub
     'sbatch': 'qsub',
+    'SLURM_SUBMIT_DIR': 'PBS_O_WORKDIR',
     'sbatch_config_template': '''
 # PBSPro configuration, see https://icl-rcs-user-guide.readthedocs.io/en/latest/hpc/queues/mpi-jobs/
 # 1 node, {num_cpus} CPUs, 16GB RAM
@@ -335,7 +379,8 @@ def write_example(args: argparse.Namespace):
     if not os.path.exists(data_dir):
         raise ValueError(f'Directory does not exist: {data_dir}')
 
-    num_cpus = 6
+    # NB: num_cpus=6 won't work for BOSTON
+    num_cpus = 16
     procs_per_node = '' if has_commit(
         '5aa622c8') else f'--procsPerNode={num_cpus}'
 
@@ -354,18 +399,14 @@ def write_example(args: argparse.Namespace):
         '156fc7ec') else 'cd $DATA_DIR/json'
 
     mpirun = config['mpirun']
+    bin_sh = config.get('/bin/sh', '/bin/sh')
     sbatch = config['sbatch']
-    if sbatch == 'sbatch':
-        SLURM_SUBMIT_DIR = 'SLURM_SUBMIT_DIR'
-    elif sbatch == 'qsub':
-        SLURM_SUBMIT_DIR = 'PBS_O_WORKDIR'
-    else:
-        raise ValueError(f'Unexpected sbatch command: {sbatch}')
+    SLURM_SUBMIT_DIR = config['SLURM_SUBMIT_DIR']
 
     sbatch_config = config["sbatch_config_template"].format(num_cpus=num_cpus)
 
     # Usage: sbatch run_sdpb_example.sh
-    script_text = f'''#!/bin/sh
+    script_text = f'''#!{bin_sh}
 
 # Example script which runs {pmp2sdp_name} and sdpb
 # Data taken from:
