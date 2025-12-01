@@ -179,14 +179,19 @@ CONFIG = {Cluster.BOSTON: {
         'GCC/12.3.0',
         'GMP/6.2.1-GCCcore-12.3.0',
         'libarchive/3.6.2-GCCcore-12.3.0',
+        # Latest: METIS/5.1.0-GCCcore-13.3.0
         'METIS/5.1.0-GCCcore-12.3.0',
+        # Latest: MPFR/4.2.1-GCCcore-13.3.0
         'MPFR/4.2.0-GCCcore-12.3.0',
         # NB: Elemental is built with openblas, so we need it even before 3.0.0
         'OpenBLAS/0.3.23-GCC-12.3.0',
         'OpenMPI/4.1.5-GCC-12.3.0',
+        # TODO this is the latest, so we cannot use newer GCCcore
+        # TODO: can we build without pkg-config?
         'pkg-config/0.29.2-GCCcore-12.3.0',
         'Python/3.11.3-GCCcore-12.3.0',
-        'RapidJSON/1.1.0-20230928-GCCcore-12.3.0'
+        # Latest: RapidJSON/1.1.0-20240815-GCCcore-13.3.0
+        'RapidJSON/1.1.0-20230928-GCCcore-12.3.0',
     ],
         'flint': [], 'mpsolve': []
     },
