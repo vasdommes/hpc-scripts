@@ -405,13 +405,13 @@ def write_example(args: argparse.Namespace):
 
     sbatch_config = config["sbatch_config_template"].format(num_cpus=num_cpus)
 
-    # Usage: sbatch run_sdpb_example.sh
+    # Usage: sbatch sdpb_example.sh
     script_text = f'''#!{bin_sh}
 
 # Example script which runs {pmp2sdp_name} and sdpb
 # Data taken from:
 # https://github.com/davidsd/sdpb/tree/8f127d92078b04e36ab587e7e4344410c26a2a5f/test/data/end-to-end_tests/SingletScalar_cT_test_nmax6/primal_dual_optimal
-# Usage: {sbatch} run_sdpb_example.sh
+# Usage: {sbatch} sdpb_example.sh
 
 {sbatch_config}
 
