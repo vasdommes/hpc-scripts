@@ -15,27 +15,30 @@ HOME = os.environ['HOME']
 
 class Cluster(StrEnum):
     BOSTON = auto()
+    CALTECH = auto()
     EXPANSE = auto()
     IMPERIAL = auto()
     UNKNOWN = auto()
 
 
 def detect_cluster() -> Cluster:
+    if os.path.exists('/resnick/'):
+        return Cluster.CALTECH
     if os.path.exists('/expanse/lustre/'):
         return Cluster.EXPANSE
-    elif HOME.startswith('/usr2/collab'):
+    if HOME.startswith('/usr2/collab'):
         return Cluster.BOSTON
-    elif HOME.startswith('/rds/general/user/'):
+    if HOME.startswith('/rds/general/user/'):
         return Cluster.IMPERIAL
-    else:
-        return Cluster.UNKNOWN
+
+    return Cluster.UNKNOWN
 
 
 def get_num_threads(cluster: Cluster) -> int:
     num_threads = 1
     if cluster == Cluster.BOSTON:
         num_threads = int(os.environ.get('NSLOTS', 1))
-    elif cluster == Cluster.EXPANSE or cluster == cluster.IMPERIAL:
+    elif cluster in [Cluster.CALTECH, Cluster.EXPANSE, cluster.IMPERIAL]:
         if os.environ['HOSTNAME'].startswith('login'):
             num_threads = 1
         else:
@@ -85,6 +88,46 @@ CONFIG = {Cluster.BOSTON: {
 #$ -l h_rt=00:30:00
 #$ -j y
 '''
+},
+    Cluster.CALTECH: {
+    'modules': {'default': [
+        'openmpi/5.0.1-gcc-13.2.0-xpoh5uw',
+        'mpfr/4.2.0-gcc-13.2.0-yy2fkq5',
+        'libarchive/3.7.1-gcc-13.2.0-bzt555v',
+    ], 'flint': ['openblas/0.3.23-gcc-11.3.1-cu3huj2'],
+        'mpsolve': []
+    },
+    'waf_args': {'default': [
+        '--elemental-dir=$HOME/install',
+        # Need to set GMP explicitly, otherwise the old version from /usr is loaded
+        '--gmpxx-dir=/central/software9/spack/opt/spack/linux-rhel9-x86_64/gcc-13.2.0/gmp-6.2.1-lcnhysea5isaes4r547jt5nw2qru5ab7',
+        '--libarchive-dir=$(pkg-config --variable=prefix libarchive)',
+        '--mpfr-dir=$(pkg-config --variable=prefix mpfr)',
+        '--rapidjson-dir=$HOME/install',
+        # '--libarchive-dir=$(pkg-config --variable=prefix libarchive)',
+    ], 'flint': ['--flint-dir=$HOME/install'], 'mpsolve': ['--mpsolve-dir=$HOME/install']},
+    # Set environment variables for ./waf configure
+    'waf_env': 'CXX=mpicxx',
+    # lua or tcl
+    'module_lang': 'tcl',
+    'mpirun': 'mpirun -v',
+    # sbatch or qsub
+    'sbatch': 'sbatch',
+    'SLURM_SUBMIT_DIR': 'SLURM_SUBMIT_DIR',
+    'sbatch_config_template': '''
+# SLURM configuration, see https://hpc.sites.caltech.edu/documentation/slurm-commands and https://slurm.schedmd.com/sbatch.html
+# 1 node, {num_cpus} CPUs, 16GB RAM
+# 30 min time limit
+#
+#SBATCH --job-name="sdpb_example.sh"
+#SBATCH --output="sdpb_example.sh.%j.out"
+#SBATCH --no-requeue
+#SBATCH --partition=expansion
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node={num_cpus}
+#SBATCH --mem=16G
+#SBATCH --account=dssimmon
+#SBATCH -t 00:30:00'''
 },
     Cluster.EXPANSE: {
     'modules': {'default': [
@@ -285,6 +328,16 @@ def waf(args: argparse.Namespace):
     if has_mpsolve:
         modules += config['modules']['mpsolve']
         waf_configure_args += config['waf_args']['mpsolve']
+
+    if args.cluster == Cluster.CALTECH:
+        # Use Boost 1.68 to make it compatible with Ning's scalar_blocks serialization
+        if args.version in ['vasdommes/simbpleboot-pmp-json', 'suning-git/sdp2input_mod_2.5.0']:
+            boost_dir = '/central/groups/dssimmon/reehorst/packages_mar7/packages/install'
+            waf_configure_args.append(f'--boost-dir={boost_dir}')
+            print(f'Will use Boost 1.68 from {boost_dir}')
+        else:
+            modules.append('boost/1.84.0-gcc-11.3.1-zauawkb')
+            waf_configure_args.append(f'--boost-dir=$BOOST_ROOT')
 
     num_threads = get_num_threads(args.cluster)
     print(f'num_threads={num_threads}')
