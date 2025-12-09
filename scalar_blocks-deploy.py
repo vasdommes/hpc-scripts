@@ -85,7 +85,39 @@ CONFIG = {
 #PBS -l walltime=00:30:00
 #PBS -j oe
 '''
-},
+    },
+    Cluster.YALE: {
+        'modules': [
+            'Eigen/3.4.0-GCCcore-12.2.0',
+            'Trilinos/13.4.1-foss-2022b-zoltan',
+        ],
+        'waf_args': [
+            # '--eigen-dir=$EBROOTEIGEN',
+            #  '--trilinos-dir=$EBROOTTRILINOS',
+            '--trilinos-libs="teuchoscomm teuchoscore teuchosparameterlist kokkoscore"',
+        ],
+        # Set environment variables for ./waf configure
+        'waf_env': 'CXX=mpicxx CXXFLAGS="-fopenmp" LDFLAGS="-fopenmp -ldl"',
+        # lua or tcl
+        'module_lang': 'lua',
+        # sbatch or qsub
+        'sbatch': 'sbatch',
+        'SLURM_SUBMIT_DIR': 'SLURM_SUBMIT_DIR',
+        'sbatch_config_template': '''
+# SLURM configuration, see https://docs.ycrc.yale.edu/clusters-at-yale/job-scheduling/ and https://slurm.schedmd.com/sbatch.html
+# 1 node, {num_cpus} CPUs, 16GB RAM
+# 30 min time limit
+#
+#SBATCH --job-name="scalar_blocks_example.sh"
+#SBATCH --output="scalar_blocks_example.sh.%j.out"
+#SBATCH --no-requeue
+#SBATCH --partition=pi_poland
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node={num_cpus}
+#SBATCH --mem=16G
+#SBATCH --time=00:30:00
+'''
+    },
 }
 
 
