@@ -282,7 +282,108 @@ def waf(args: argparse.Namespace):
     ])
 
 
+def write_module_common(args: argparse.Namespace):
+    config = CONFIG[args.cluster]
+    lang = config['module_lang']
+    modules = config['modules']
+
+    if lang == 'lua':
+        common_filename = 'common.lua'
+    elif lang == 'tcl':
+        common_filename = 'common.tcl'
+    else:
+        raise ValueError(f'Unknown module language: {lang}')
+
+    scalar_blocks = args.module_name.split('/')[0]
+    if scalar_blocks != 'scalar_blocks':
+        raise ValueError(
+            f'Module name {args.module_name} does not start with "scalar_blocks/"')
+    common_module_path = os.path.join(
+        args.module_prefix, scalar_blocks, '.common', common_filename)
+    print(f'===Writing {common_filename}: {common_module_path}')
+    os.makedirs(os.path.dirname(common_module_path), exist_ok=True)
+    install_prefix = args.install_prefix
+    if not install_prefix.endswith('/'):
+        install_prefix += '/'
+
+    if lang == 'lua':
+        depends_on = '\n    '.join(
+            f'depends_on("{module}")' for module in modules)
+        common_text = f'''local function setup_scalar_blocks()
+    
+    help([[
+Scalar blocks for Conformal Bootstrap. https://gitlab.com/bootstrapcollaboration/scalar_blocks
+Example script:
+sbatch $SCALAR_BLOCKS_HOME/share/scalar_blocks_example.sh 
+]])
+    local name = myModuleName() -- scalar_blocks
+    local version = myModuleVersion()
+    local base = "{install_prefix}" .. name .. "/" .. version
+
+    -- Load dependencies
+    {depends_on}
+
+    -- Define environment variables
+    prepend_path("PATH", pathJoin(base, "bin"))
+    setenv("SCALAR_BLOCKS_HOME", base)
+    setenv("SCALAR_BLOCKS_VERSION", version)
+
+    -- Metadata
+    whatis("Name:        "..name)
+    whatis("Version:     " .. version)
+    whatis("URL:         https://gitlab.com/bootstrapcollaboration/scalar_blocks")
+    whatis(
+        "Scalar Blocks for Conformal Bootstrap. Example script: $SCALAR_BLOCKS_HOME/share/scalar_blocks_example.sh")
+end
+
+return {{
+    setup_scalar_blocks = setup_scalar_blocks
+}}
+'''
+    elif lang == 'tcl':
+        raise ValueError("TODO: common.tcl not implemented!")
+    else:
+        raise ValueError(f'Unknown module language: {lang}')
+    if os.path.exists(common_module_path):
+        print(
+            f'{common_filename} already exists and will be reused: {common_module_path}')
+    else:
+        with open(common_module_path, 'w') as f:
+            f.write(common_text)
+
+
+def write_modulerc(args: argparse.Namespace):
+    lang = CONFIG[args.cluster]['module_lang']
+
+    if lang == 'lua':
+        modulerc_filename = '.modulerc.lua'
+        modulerc_text = 'module_version("scalar_blocks/master", "default")\n'
+    elif lang == 'tcl':
+        modulerc_filename = '.modulerc'
+        modulerc_text = '''#%Module
+module-version ./master default'''
+    else:
+        raise ValueError(f'Unknown module language: {lang}')
+
+    scalar_blocks = args.module_name.split('/')[0]
+    if scalar_blocks != 'scalar_blocks':
+        raise ValueError(
+            f'Module name {args.module_name} does not start with "scalar_blocks/"')
+    modulerc_path = os.path.join(
+        args.module_prefix, scalar_blocks, modulerc_filename)
+    print(f'===Writing {modulerc_filename}: {modulerc_path}')
+    if os.path.exists(modulerc_path):
+        print(f'{modulerc_filename} already exists and will be reused: {modulerc_path}')
+    else:
+        with open(modulerc_path, 'w') as f:
+            f.write(modulerc_text)
+
+
 def write_module(args: argparse.Namespace):
+    # Optionally write common module files reused by all versions
+    write_module_common(args)
+    write_modulerc(args)
+
     lang = CONFIG[args.cluster]['module_lang']
 
     if lang == 'lua':
