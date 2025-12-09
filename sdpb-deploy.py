@@ -159,7 +159,7 @@ CONFIG = {Cluster.BOSTON: {
     'sbatch': 'sbatch',
     'SLURM_SUBMIT_DIR': 'SLURM_SUBMIT_DIR',
     'sbatch_config_template': '''
-# SLURM configuration, see https://www.sdsc.edu/support/user_guides/expanse.html#running and https://slurm.schedmd.com/sbatch.html
+# SLURM configuration, see https://www.sdsc.edu/systems/expanse/user_guide.html#narrow-wysiwyg-7 and https://slurm.schedmd.com/sbatch.html
 # 1 node, {num_cpus} CPUs, 16GB RAM
 # 30 min time limit
 #
