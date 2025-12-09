@@ -215,8 +215,10 @@ def waf(args: argparse.Namespace):
     num_threads = get_num_threads(args.cluster)
     print(f'num_threads={num_threads}')
 
-    # Before updating from 2.0.14 to 2.0.26, ./waf failed
-    call_waf = './waf' if has_commit('e0610f17') else 'python2 ./waf'
+    # Before updating from 2.0.14 to 2.0.21, ./waf failed
+    # TODO: python2 not found e.g. on Yale and Imperial, and loading Python 2 module conflicts with Python 3 dependencies.
+    # So, our script works starting from scalar_blocks 1.0.1
+    call_waf = './waf' if has_commit('cf72b00a') else 'python2 ./waf'
 
     if os.path.exists(install_dir):
         parent, name = os.path.split(install_dir)
