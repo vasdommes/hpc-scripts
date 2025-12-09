@@ -57,25 +57,25 @@ def get_num_threads(cluster: Cluster) -> int:
 # TODO: Store as Namespace? Read from file?
 CONFIG = {
     Cluster.IMPERIAL: {
-    'modules': [
-        'tools/prod',
-        'Eigen/3.4.0-GCCcore-11.3.0',
-        # NB: Trilinos depends on GCCcore/11.3.0,
-        # so we cannot load e.g. Eigen/3.4.0-GCCcore-14.3.0
-        'Trilinos/13.4.1-foss-2022a',
-    ],
-    'waf_args': ['--eigen-dir=$EBROOTEIGEN',
-        '--trilinos-dir=$EBROOTTRILINOS',
-        '--trilinos-libs="teuchoscomm teuchoscore teuchosparameterlist kokkoscore"',
+        'modules': [
+            'tools/prod',
+            'Eigen/3.4.0-GCCcore-11.3.0',
+            # NB: Trilinos depends on GCCcore/11.3.0,
+            # so we cannot load e.g. Eigen/3.4.0-GCCcore-14.3.0
+            'Trilinos/13.4.1-foss-2022a',
         ],
-    # Set environment variables for ./waf configure
-    'waf_env': 'CXX=mpicxx CXXFLAGS="-fopenmp" LDFLAGS="-fopenmp -ldl"',
-    # lua or tcl
-    'module_lang': 'lua',
-    # sbatch or qsub
-    'sbatch': 'qsub',
-    'SLURM_SUBMIT_DIR': 'PBS_O_WORKDIR',
-    'sbatch_config_template': '''
+        'waf_args': ['--eigen-dir=$EBROOTEIGEN',
+                     '--trilinos-dir=$EBROOTTRILINOS',
+                     '--trilinos-libs="teuchoscomm teuchoscore teuchosparameterlist kokkoscore"',
+                     ],
+        # Set environment variables for ./waf configure
+        'waf_env': 'CXX=mpicxx CXXFLAGS="-fopenmp" LDFLAGS="-fopenmp -ldl"',
+        # lua or tcl
+        'module_lang': 'lua',
+        # sbatch or qsub
+        'sbatch': 'qsub',
+        'SLURM_SUBMIT_DIR': 'PBS_O_WORKDIR',
+        'sbatch_config_template': '''
 # PBSPro configuration, see https://icl-rcs-user-guide.readthedocs.io/en/latest/hpc/getting-started/running-your-first-job/
 # 1 node, {num_cpus} CPUs, 16GB RAM
 # 30 min time limit
@@ -145,7 +145,6 @@ def parse_args() -> list[argparse.Namespace]:
         raise ValueError('Unknown cluster!')
     if cluster not in CONFIG:
         raise ValueError(f'No configuration found for cluster={cluster}')
-
 
     def create_args_for_version(version):
         args = copy.deepcopy(original_args)
