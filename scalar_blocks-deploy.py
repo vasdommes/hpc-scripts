@@ -56,6 +56,45 @@ def get_num_threads(cluster: Cluster) -> int:
 
 # TODO: Store as Namespace? Read from file?
 CONFIG = {
+    Cluster.EXPANSE: {
+        'modules': [
+            'cpu/0.15.4',
+            'intel/19.1.1.217',
+            'eigen/3.3.7',
+            'gcc/10.2.0',
+            'cmake/3.18.2',
+            'boost/1.74.0',
+            'gmp/6.1.2',
+        ],
+        'waf_args': [
+            # '--eigen-incdir=$EIGENHOME/include/eigen3',
+            # TODO: gcc/10.2.0 overrides intel/19.1.1.217 and apparently unloads eigen/3.3.7.
+            # So, $EIGENHOME is empty and we have to specify the path manually.
+            # TODO: recompile everything (Trilinos and scalar_blocks) with Intel compiler?
+            '--eigen-incdir=/cm/shared/apps/spack/cpu/opt/spack/linux-centos8-zen2/intel-19.1.1.217/eigen-3.3.7-plaog3szjnn3gh6wq5co55xxjuswwo7f/include/eigen3',
+            '--trilinos-dir=$HOME/install',
+        ],
+        # lua or tcl
+        'module_lang': 'lua',
+        # sbatch or qsub
+        'sbatch': 'sbatch',
+        'SLURM_SUBMIT_DIR': 'SLURM_SUBMIT_DIR',
+        'sbatch_config_template': '''
+# SLURM configuration, see https://www.sdsc.edu/systems/expanse/user_guide.html#narrow-wysiwyg-7 and https://slurm.schedmd.com/sbatch.html
+# 1 node, {num_cpus} CPUs, 16GB RAM
+# 30 min time limit
+#
+#SBATCH --job-name="scalar_blocks_example.sh"
+#SBATCH --output="scalar_blocks_example.sh.%j.out"
+#SBATCH --no-requeue
+#SBATCH --account=yun124
+#SBATCH --partition=compute
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node={num_cpus}
+#SBATCH --mem=16G
+#SBATCH --time=00:30:00
+'''
+    },
     Cluster.IMPERIAL: {
         'modules': [
             'tools/prod',
@@ -210,6 +249,7 @@ def waf(args: argparse.Namespace):
 
     modules = config['modules']
 
+    waf_env = config.get('waf_env', '')
     waf_configure_args = [f'--prefix={install_dir}'] + config['waf_args']
 
     num_threads = get_num_threads(args.cluster)
@@ -234,7 +274,7 @@ def waf(args: argparse.Namespace):
         f'module load {" ".join(modules)}',
         f'{call_waf} --version',
         # 'rm -rf ./build',
-        f'({config["waf_env"]} {call_waf} configure {" ".join(waf_configure_args)} || (cat build/config.log && exit 1))',
+        f'({waf_env} {call_waf} configure {" ".join(waf_configure_args)} || (cat build/config.log && exit 1))',
         f'{call_waf} -j{num_threads}',
         'ldd ./build/scalar_blocks',
         './build/scalar_blocks --version',
