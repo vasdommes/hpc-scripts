@@ -18,6 +18,7 @@ class Cluster(StrEnum):
     CALTECH = auto()
     EXPANSE = auto()
     IMPERIAL = auto()
+    YALE = auto()
     UNKNOWN = auto()
 
 
@@ -26,6 +27,8 @@ def detect_cluster() -> Cluster:
         return Cluster.CALTECH
     if os.path.exists('/expanse/lustre/'):
         return Cluster.EXPANSE
+    if os.path.exists('/vast/palmer/home.grace/'):
+        return Cluster.YALE
     if HOME.startswith('/usr2/collab'):
         return Cluster.BOSTON
     if HOME.startswith('/rds/general/user/'):
@@ -38,7 +41,7 @@ def get_num_threads(cluster: Cluster) -> int:
     num_threads = 1
     if cluster == Cluster.BOSTON:
         num_threads = int(os.environ.get('NSLOTS', 1))
-    elif cluster in [Cluster.CALTECH, Cluster.EXPANSE, cluster.IMPERIAL]:
+    elif cluster in [Cluster.CALTECH, Cluster.EXPANSE, Cluster.IMPERIAL, Cluster.YALE]:
         if os.environ['HOSTNAME'].startswith('login'):
             num_threads = 1
         else:
@@ -216,6 +219,50 @@ CONFIG = {Cluster.BOSTON: {
 #PBS -l walltime=00:30:00
 #PBS -j oe
 '''
+},
+    Cluster.YALE: {
+    'modules': {'default': [
+        # 'Autoconf/2.71-GCCcore-12.2.0',
+        # 'Automake/1.16.5-GCCcore-12.2.0',
+        # 'Bison/3.8.2-GCCcore-12.2.0',
+        'Boost/1.83.0-GCC-12.2.0',
+        # 'CMake/3.24.3-GCCcore-12.2.0',
+        'GMP/6.2.1-GCCcore-12.2.0',
+        'libarchive/3.6.1-GCCcore-12.2.0',
+        # 'libtool/2.4.7-GCCcore-12.2.0',
+        'MPFR/4.2.0-GCCcore-12.2.0',
+        # 'OpenBLAS/0.3.21-GCC-12.2.0',
+        'OpenMPI/4.1.4-GCC-12.2.0',
+        'pkg-config/0.29.2-GCCcore-12.2.0',
+        'Python/3.10.8-GCCcore-12.2.0',
+        'RapidJSON/1.1.0-GCCcore-12.2.0',
+    ], 'flint': ['OpenBLAS/0.3.21-GCC-12.2.0'],
+        'mpsolve': []
+    },
+    'waf_args': {'default': [
+        '--elemental-dir=$HOME/install',
+    ], 'flint': ['--flint-dir=$HOME/install'], 'mpsolve': ['--mpsolve-dir=$HOME/install']},
+    # Set environment variables for ./waf configure
+    'waf_env': 'CXX=mpicxx',
+    # lua or tcl
+    'module_lang': 'lua',
+    'mpirun': 'mpirun',
+    # sbatch or qsub
+    'sbatch': 'sbatch',
+    'SLURM_SUBMIT_DIR': 'SLURM_SUBMIT_DIR',
+    'sbatch_config_template': '''
+# SLURM configuration, see https://docs.ycrc.yale.edu/clusters-at-yale/job-scheduling/ and https://slurm.schedmd.com/sbatch.html
+# 1 node, {num_cpus} CPUs, 16GB RAM
+# 30 min time limit
+#
+#SBATCH --job-name="sdpb_example.sh"
+#SBATCH --output="sdpb_example.sh.%j.out"
+#SBATCH --no-requeue
+#SBATCH --partition=pi_poland
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node={num_cpus}
+#SBATCH --mem=16G
+#SBATCH --time=00:30:00'''
 },
 }
 
