@@ -149,7 +149,16 @@ CONFIG = {Cluster.BOSTON: {
         '--rapidjson-dir=$HOME/install',
         # '--boost-dir=$HOME/install',
         '--libarchive-dir=$HOME/install'
-    ], 'flint': ['--flint-dir=$HOME/install'], 'mpsolve': ['--mpsolve-dir=$HOME/install']},
+    ],
+        # FLINT is installed in a separate directory, otherwise --elemental-dir=$HOME/install shadows other FLINT versions.
+        # Override with --flint-dir, e.g. --flint-dir=$HOME/install/flint-3.7.0-dev-0bb30ef3
+        'flint': ['--flint-dir=$HOME/install/flint-3.0.1'],
+        # Used instead of 'flint' since 0fc4008a (Fix build with FLINT 3.7).
+        # FLINT >= 3.1 requires GMP >= 6.2.1 and MPFR >= 4.1.0, see ~/build/flint-3.7.0-dev-build.sh
+        'flint_3.7': ['--flint-dir=$HOME/install/flint-3.7.0-dev-0bb30ef3',
+                      '--gmpxx-dir=$HOME/install',
+                      '--mpfr-dir=$HOME/install/mpfr-4.2.2'],
+        'mpsolve': ['--mpsolve-dir=$HOME/install']},
     # Set environment variables for ./waf configure
     'waf_env': 'CXX=mpicxx',
     # lua or tcl
@@ -317,6 +326,12 @@ def parse_args() -> list[argparse.Namespace]:
                         help='Modules prefix (default: %(default)s)')
     parser.add_argument('--module-name', required=False,
                         help='Module name, e.g. sdpb/3.0.0 (default: --module-name = --install-name). Installs module MODULES_PREFIX/MODULE_NAME')
+    parser.add_argument('--flint-dir', required=False,
+                        help='FLINT installation directory, overrides --flint-dir from cluster config. Example: $HOME/install/flint-3.7.0-dev-0bb30ef3')
+    parser.add_argument('--gmpxx-dir', required=False,
+                        help='GMP installation directory, overrides --gmpxx-dir from cluster config. Should match GMP used to build FLINT. Example: $HOME/install')
+    parser.add_argument('--mpfr-dir', required=False,
+                        help='MPFR installation directory, overrides --mpfr-dir from cluster config. Should match MPFR used to build FLINT. Example: $HOME/install/mpfr-4.2.2')
     parser.add_argument('-v', '--verbose', help='increase output verbosity',
                         action='store_true')
     original_args = parser.parse_args()
@@ -351,6 +366,11 @@ def parse_args() -> list[argparse.Namespace]:
 
 def waf(args: argparse.Namespace):
     def has_commit(commit_hash):
+        # Commit may be missing in the clone, e.g. 0fc4008a in vasdommes/sdpb
+        try:
+            args.repo.commit(commit_hash)
+        except git.BadName:
+            return False
         return args.repo.is_ancestor(commit_hash, 'HEAD')
 
     print('===Load modules and run waf')
@@ -358,7 +378,8 @@ def waf(args: argparse.Namespace):
 
     config = CONFIG[args.cluster]
 
-    modules = config['modules']['default']
+    # Copy, otherwise "modules +=" below modifies CONFIG for the next versions
+    modules = list(config['modules']['default'])
 
     waf_configure_args = [f'--prefix={install_dir}'] + \
         config['waf_args']['default']
@@ -366,7 +387,14 @@ def waf(args: argparse.Namespace):
     has_flint = has_commit('4368aeb8')
     if has_flint:
         modules += config['modules']['flint']
-        waf_configure_args += config['waf_args']['flint']
+        # 0fc4008a: Fix build with FLINT 3.7
+        if 'flint_3.7' in config['waf_args'] and has_commit('0fc4008a'):
+            waf_configure_args += config['waf_args']['flint_3.7']
+        else:
+            waf_configure_args += config['waf_args']['flint']
+    elif args.flint_dir:
+        raise ValueError(
+            f'--flint-dir={args.flint_dir} is set, but SDPB version {args.version} does not use FLINT.')
 
     # El::Matrix::Control() causes memory leaks
     has_El_Matrix_Control = has_commit(
@@ -390,6 +418,14 @@ def waf(args: argparse.Namespace):
         else:
             modules.append('boost/1.84.0-gcc-11.3.1-zauawkb')
             waf_configure_args.append(f'--boost-dir=$BOOST_ROOT')
+
+    # Override package directories from cluster config
+    for package, package_dir in [('flint', args.flint_dir), ('gmpxx', args.gmpxx_dir), ('mpfr', args.mpfr_dir)]:
+        if package_dir:
+            option = f'--{package}-dir='
+            waf_configure_args = [arg for arg in waf_configure_args
+                                  if not arg.startswith(option)]
+            waf_configure_args.append(option + package_dir)
 
     num_threads = get_num_threads(args.cluster)
     print(f'num_threads={num_threads}')
